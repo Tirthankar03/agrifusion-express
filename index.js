@@ -90,19 +90,80 @@ app.post('/login', async (req, res) => {
 //     res.status(500).json({ error: err.message });
 //   }
 // });
+// app.post('/logs', authenticateToken, upload.single('image'), async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ error: 'No image uploaded' });
+//     }
+
+//     const tempFilePath = req.file.path;
+
+//     // Prepare multipart/form-data
+//     const formData = new FormData();
+//     formData.append('file', fs.createReadStream(tempFilePath));
+
+//     // Call FastAPI
+//     const fastapiRes = await axios.post(`${process.env.FASTAPI_URL}/detect/`, formData, {
+//       headers: {
+//         ...formData.getHeaders(),
+//       },
+//       maxContentLength: Infinity,
+//       maxBodyLength: Infinity
+//     });
+
+//     const {
+//       original_image_url,
+//       processed_image_url,
+//       weedCount,
+//       weedsEliminated,
+//       successRate
+//     } = fastapiRes.data;
+
+//     // Save log
+//     const log = new Log({
+//       user: req.user.userId,
+//       original_image_url,
+//       processed_image_url,
+//       weedCount,
+//       weedsEliminated,
+//       successRate
+//     });
+
+//     await log.save();
+
+//     // Clean up the uploaded file
+//     fs.unlink(tempFilePath, err => {
+//       if (err) console.error("Temp file cleanup error:", err);
+//     });
+
+//     res.status(201).json(log);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: err.message || 'Something went wrong' });
+//   }
+// });
+
 app.post('/logs', authenticateToken, upload.single('image'), async (req, res) => {
+  function log(message) {
+    console.log(`[${new Date().toISOString()}] ${message}`);
+  }
+
+  log("Received request at /logs");
+
   try {
     if (!req.file) {
+      log("No image uploaded");
       return res.status(400).json({ error: 'No image uploaded' });
     }
 
     const tempFilePath = req.file.path;
+    log(`Temp file path: ${tempFilePath}`);
 
-    // Prepare multipart/form-data
+    log("Preparing form data for FastAPI");
     const formData = new FormData();
     formData.append('file', fs.createReadStream(tempFilePath));
 
-    // Call FastAPI
+    log("Calling FastAPI /detect/ endpoint");
     const fastapiRes = await axios.post(`${process.env.FASTAPI_URL}/detect/`, formData, {
       headers: {
         ...formData.getHeaders(),
@@ -110,6 +171,7 @@ app.post('/logs', authenticateToken, upload.single('image'), async (req, res) =>
       maxContentLength: Infinity,
       maxBodyLength: Infinity
     });
+    log("FastAPI response received");
 
     const {
       original_image_url,
@@ -119,8 +181,8 @@ app.post('/logs', authenticateToken, upload.single('image'), async (req, res) =>
       successRate
     } = fastapiRes.data;
 
-    // Save log
-    const log = new Log({
+    log("Saving log to database");
+    const logEntry = new Log({
       user: req.user.userId,
       original_image_url,
       processed_image_url,
@@ -129,21 +191,23 @@ app.post('/logs', authenticateToken, upload.single('image'), async (req, res) =>
       successRate
     });
 
-    await log.save();
+    await logEntry.save();
+    log("Log saved to database");
 
-    // Clean up the uploaded file
     fs.unlink(tempFilePath, err => {
-      if (err) console.error("Temp file cleanup error:", err);
+      if (err) {
+        console.error("Temp file cleanup error:", err);
+      } else {
+        log("Temp file cleaned up");
+      }
     });
 
-    res.status(201).json(log);
+    res.status(201).json(logEntry);
   } catch (err) {
-    console.error(err);
+    console.error("Error in /logs endpoint:", err);
     res.status(500).json({ error: err.message || 'Something went wrong' });
   }
 });
-
-
 // Get user logs (auth required)
 app.get('/logs', authenticateToken, async (req, res) => {
   try {
